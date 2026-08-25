@@ -8,7 +8,16 @@ from app.database.models import Base
 
 
 def build_engine(database_url: str) -> Engine:
-    """Create a database engine without opening a connection eagerly."""
+    """Create a database engine without opening a connection eagerly.
+
+    Neon supplies standard ``postgresql://`` URLs.  This project uses the
+    modern psycopg driver, so make that driver explicit before SQLAlchemy
+    constructs the engine.
+    """
+    if database_url.startswith("postgres://"):
+        database_url = "postgresql+psycopg://" + database_url.removeprefix("postgres://")
+    elif database_url.startswith("postgresql://"):
+        database_url = "postgresql+psycopg://" + database_url.removeprefix("postgresql://")
     return create_engine(database_url, pool_pre_ping=True)
 
 

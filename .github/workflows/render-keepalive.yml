@@ -1,0 +1,17 @@
+name: Keep free Render service awake
+
+on:
+  schedule:
+    - cron: "*/13 * * * *"
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request the public health endpoint
+        env:
+          RENDER_HEALTHCHECK_URL: ${{ secrets.RENDER_HEALTHCHECK_URL }}
+        run: |
+          test -n "$RENDER_HEALTHCHECK_URL"
+          curl --fail --show-error --silent --retry 2 --retry-delay 10 --max-time 120 "$RENDER_HEALTHCHECK_URL"

@@ -5,13 +5,14 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    plan: free
     envVars:
       - key: APP_ENV
         value: production
       - key: SCHEDULER_ENABLED
-        value: "false"
+        value: "true"
       - key: AUTO_PUBLISH_SCHEDULED
-        value: "false"
+        value: "true"
       - key: AUTO_PUBLISH_BREAKING
         value: "false"
       - key: DATABASE_URL
@@ -26,17 +27,3 @@ services:
         sync: false
       - key: PUBLIC_BASE_URL
         sync: false
-  - type: worker
-    name: adabary-news-scheduler
-    runtime: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m app.scheduler.worker
-    envVars:
-      - key: DATABASE_URL
-        sync: false
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      - key: TELEGRAM_CHANNEL_ID
-        sync: false
-      - key: AUTO_PUBLISH_SCHEDULED
-        value: "true"

@@ -71,12 +71,13 @@ Set `SCHEDULER_ENABLED=true` and `AUTO_PUBLISH_SCHEDULED=true` only when you are
 for scheduled posts to go live. Set `AUTO_PUBLISH_BREAKING=true` only when high-priority
 breaking items may bypass manual approval; otherwise inspect candidates at `GET /breaking`.
 
-## Production: Render + Neon
+## Production: free Render + Neon
 
-The included `render.yaml` creates a public FastAPI web service and a separate scheduler
-worker. Create a Neon database, copy its pooled PostgreSQL connection string into Render
-as `DATABASE_URL`, then deploy this repository as a Render Blueprint. Render requires the
-web service to bind to `0.0.0.0` and its assigned `PORT`; the Blueprint does this.
+The included `render.yaml` creates one free public FastAPI web service. Create a Neon
+database, copy its pooled PostgreSQL connection string into Render as `DATABASE_URL`, then
+deploy this repository as a Render Blueprint. Standard Neon `postgresql://` URLs work
+directly. Render requires the web service to bind to `0.0.0.0` and its assigned `PORT`;
+the Blueprint does this.
 
 Set these secret environment variables in Render (never commit them):
 
@@ -93,6 +94,15 @@ After the Render web-service URL is known, set `PUBLIC_BASE_URL` to it and call
 `POST /telegram/webhook/setup` once. In a private chat with the bot, send `/start` and
 tap **Find news**. The bot offers **Publish now**, **Reject**, **In 1 hour**, and
 **In 3 hours** buttons. Only `TELEGRAM_OWNER_CHAT_ID` can invoke those controls.
+
+Free Render web services pause after 15 minutes with no incoming traffic. To keep the
+owner bot and in-process scheduler available for a hobby deployment, the repository
+includes `.github/workflows/render-keepalive.yml`, which requests `/health` every
+13 minutes. After deployment, create the GitHub repository secret
+`RENDER_HEALTHCHECK_URL` with the value `https://<your-render-service>/health`.
+GitHub's scheduled jobs can be delayed, and free Render services can restart, so this is
+not a production availability guarantee. A paid worker is the proper upgrade path when
+reliability becomes essential.
 
 ## Tests
 
