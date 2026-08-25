@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: adabary-news-engine
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SCHEDULER_ENABLED
+        value: "false"
+      - key: AUTO_PUBLISH_SCHEDULED
+        value: "false"
+      - key: AUTO_PUBLISH_BREAKING
+        value: "false"
+      - key: DATABASE_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHANNEL_ID
+        sync: false
+      - key: TELEGRAM_OWNER_CHAT_ID
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: PUBLIC_BASE_URL
+        sync: false
+  - type: worker
+    name: adabary-news-scheduler
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.scheduler.worker
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHANNEL_ID
+        sync: false
+      - key: AUTO_PUBLISH_SCHEDULED
+        value: "true"
