@@ -14,6 +14,10 @@ def build_engine(database_url: str) -> Engine:
     modern psycopg driver, so make that driver explicit before SQLAlchemy
     constructs the engine.
     """
+    # Some browser dashboards wrap long connection strings with non-breaking
+    # spaces.  PostgreSQL host names cannot contain whitespace, so discard it
+    # before handing the URL to SQLAlchemy.
+    database_url = "".join(database_url.split())
     if database_url.startswith("postgres://"):
         database_url = "postgresql+psycopg://" + database_url.removeprefix("postgres://")
     elif database_url.startswith("postgresql://"):

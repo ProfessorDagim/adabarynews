@@ -11,3 +11,9 @@ def test_existing_psycopg_url_is_unchanged() -> None:
     engine = build_engine("postgresql+psycopg://user:password@example.com:5432/adabary")
 
     assert engine.url.drivername == "postgresql+psycopg"
+
+
+def test_non_breaking_spaces_are_removed_from_database_url() -> None:
+    engine = build_engine("postgresql://user:password@example\u00a0\u00a0.com:5432/adabary")
+
+    assert engine.url.host == "example.com"
