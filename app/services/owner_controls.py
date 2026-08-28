@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.services.article_analysis import ArticleAnalysisService
@@ -11,7 +12,7 @@ from app.services.news_collector import NewsCollectionService
 from app.services.scheduling import SchedulingService
 from app.services.telegram_publication import TelegramPublicationService
 from app.telegram.publisher import TelegramPublisher
-from app.database.models import PostDraft
+from app.database.models import Article, ArticleAnalysis, PostDraft
 
 
 def control_panel() -> dict[str, object]:
@@ -51,23 +52,47 @@ class OwnerControlService:
         self.scheduling, self.publication, self.bot, self.owner_chat_id = scheduling, publication, bot, owner_chat_id
 
     async def find_news(
-        self, session: Session, query: str, limit: int, timeout_seconds: float | None = None
+        self,
+        session: Session,
+        query: str,
+        limit: int,
+        timeout_seconds: float | None = None,
+        fallback_minimum_score: int = 40,
     ) -> int:
         articles = await self.news.collect(query, limit, timeout_seconds)
-        sent = 0
+        candidates: list[tuple[Article, ArticleAnalysis]] = []
         for incoming in articles:
-            stored = self.storage.store([incoming], session)
-            if not stored.stored:
-                continue
-            # The prior storage call committed the record; retrieve the stored object by URL.
-            from sqlalchemy import select
-            from app.database.models import Article
+            self.storage.store([incoming], session)
+            # Stored articles remain useful candidates until they receive a draft.
             article = session.scalar(select(Article).where(Article.url == str(incoming.url)))
             if article is None:
                 continue
-            result = await self.analysis.analyze_and_store(article, session)
-            if not result.recommended:
+            if session.scalar(select(PostDraft).where(PostDraft.article_id == article.id)) is not None:
                 continue
+            result = await self.analysis.analyze_and_store(article, session)
+            candidates.append((article, result))
+
+        recommended = [(article, analysis) for article, analysis in candidates if analysis.recommended]
+        if not recommended:
+            # When no newly collected story clears the strict threshold, offer the best
+            # undrafted story already known to the editorial database. This makes the
+            # owner workflow useful on quiet news days without ever reposting a draft.
+            fallback = session.execute(
+                select(Article, ArticleAnalysis)
+                .join(ArticleAnalysis, ArticleAnalysis.article_id == Article.id)
+                .outerjoin(PostDraft, PostDraft.article_id == Article.id)
+                .where(PostDraft.id.is_(None), ArticleAnalysis.final_score >= fallback_minimum_score)
+                .order_by(ArticleAnalysis.final_score.desc())
+                .limit(1)
+            ).first()
+            if fallback is not None:
+                article, analysis = fallback
+                analysis.recommended = True
+                session.commit()
+                recommended = [(article, analysis)]
+
+        sent = 0
+        for article, _ in recommended:
             draft = await self.drafts.generate_and_store(article, session)
             await self.bot.send_message(self.owner_chat_id, draft.post_text, approval_buttons(draft.id))
             sent += 1

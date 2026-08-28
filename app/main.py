@@ -327,6 +327,7 @@ async def telegram_webhook(
                         "artificial intelligence OR OpenAI OR ChatGPT OR AI",
                         settings.owner_find_limit,
                         settings.owner_find_timeout_seconds,
+                        settings.owner_fallback_minimum_score,
                     )
                     await controls.bot.send_message(
                         settings.telegram_owner_chat_id,
