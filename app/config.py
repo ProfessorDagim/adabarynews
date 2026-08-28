@@ -15,6 +15,8 @@ class Settings(BaseSettings):
         "NVIDIA OR robotics"
     )
     news_collection_limit: int = 20
+    owner_find_limit: int = 5
+    owner_find_timeout_seconds: float = 6.0
     analysis_provider: str = "heuristic"
     analysis_minimum_score: int = 70
     ai_api_key: str | None = None

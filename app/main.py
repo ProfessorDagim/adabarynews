@@ -1,3 +1,4 @@
+import asyncio
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
@@ -314,7 +315,33 @@ async def telegram_webhook(
         callback_id = callback.get("id")
         if not isinstance(sender, dict) or str(sender.get("id")) != settings.telegram_owner_chat_id:
             raise HTTPException(status_code=403, detail="Only the owner can use this bot")
-        if isinstance(data, str) and isinstance(callback_id, str):
+        if data == "find" and isinstance(callback_id, str):
+            await controls.bot.answer_callback(callback_id, "Searching the latest news…")
+            await controls.bot.send_message(settings.telegram_owner_chat_id, "🔎 Searching the latest news…")
+
+            async def search_in_background() -> None:
+                background_session = SessionLocal()
+                try:
+                    sent = await controls.find_news(
+                        background_session,
+                        "artificial intelligence OR OpenAI OR ChatGPT OR AI",
+                        settings.owner_find_limit,
+                        settings.owner_find_timeout_seconds,
+                    )
+                    await controls.bot.send_message(
+                        settings.telegram_owner_chat_id,
+                        f"Search complete: {sent} draft(s) ready for review.",
+                    )
+                except Exception:
+                    await controls.bot.send_message(
+                        settings.telegram_owner_chat_id,
+                        "Search could not finish. Please try Find news again.",
+                    )
+                finally:
+                    background_session.close()
+
+            asyncio.create_task(search_in_background())
+        elif isinstance(data, str) and isinstance(callback_id, str):
             result = await controls.handle_callback(data, session)
             await controls.bot.answer_callback(callback_id, result)
         return {"ok": True}

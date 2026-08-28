@@ -50,8 +50,10 @@ class OwnerControlService:
         self.news, self.storage, self.analysis, self.drafts = news, storage, analysis, drafts
         self.scheduling, self.publication, self.bot, self.owner_chat_id = scheduling, publication, bot, owner_chat_id
 
-    async def find_news(self, session: Session, query: str, limit: int) -> int:
-        articles = await self.news.collect(query, limit)
+    async def find_news(
+        self, session: Session, query: str, limit: int, timeout_seconds: float | None = None
+    ) -> int:
+        articles = await self.news.collect(query, limit, timeout_seconds)
         sent = 0
         for incoming in articles:
             stored = self.storage.store([incoming], session)
@@ -74,7 +76,7 @@ class OwnerControlService:
     async def handle_callback(self, data: str, session: Session) -> str:
         parts = data.split(":")
         if data == "find":
-            sent = await self.find_news(session, "artificial intelligence OR OpenAI OR ChatGPT OR AI", 10)
+            sent = await self.find_news(session, "artificial intelligence OR OpenAI OR ChatGPT OR AI", 5, 6.0)
             return f"Found {sent} recommended draft(s) for review."
         if len(parts) < 2:
             raise HTTPException(status_code=400, detail="Unknown control action")

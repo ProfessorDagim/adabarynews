@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -29,21 +30,25 @@ class RssCollector:
         owns_client = client is None
         client = client or httpx.AsyncClient(timeout=20.0, follow_redirects=True)
         try:
-            articles: list[NewsArticle] = []
-            for feed in self.feeds:
+            async def fetch_feed(feed: RssFeed) -> list[NewsArticle]:
                 try:
                     response = await client.get(feed.url)
                     response.raise_for_status()
                 except httpx.HTTPError:
-                    continue
+                    return []
                 parsed = feedparser.parse(response.content)
+                feed_articles: list[NewsArticle] = []
                 for entry in parsed.entries:
                     article = self._normalize(entry, feed)
                     if article and is_usable_article(article):
-                        articles.append(article)
-                        if len(articles) >= limit:
-                            return articles
-            return articles
+                        feed_articles.append(article)
+                        if len(feed_articles) >= limit:
+                            break
+                return feed_articles
+
+            results = await asyncio.gather(*(fetch_feed(feed) for feed in self.feeds))
+            articles = [article for feed_articles in results for article in feed_articles]
+            return articles[:limit]
         finally:
             if owns_client:
                 await client.aclose()

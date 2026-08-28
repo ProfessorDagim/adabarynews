@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from app.collectors.models import NewsArticle
@@ -24,10 +26,27 @@ class FailingCollector:
         raise RuntimeError("provider unavailable")
 
 
+class SlowCollector:
+    name = "slow"
+
+    async def collect(self, query: str, limit: int) -> list[NewsArticle]:
+        await asyncio.sleep(1)
+        return []
+
+
 @pytest.mark.asyncio
 async def test_service_continues_when_a_provider_fails() -> None:
     articles = await NewsCollectionService([WorkingCollector(), FailingCollector()]).collect(
         "AI", 10
+    )
+
+    assert [article.source_name for article in articles] == ["Test"]
+
+
+@pytest.mark.asyncio
+async def test_service_returns_completed_sources_after_timeout() -> None:
+    articles = await NewsCollectionService([WorkingCollector(), SlowCollector()]).collect(
+        "AI", 10, timeout_seconds=0.01
     )
 
     assert [article.source_name for article in articles] == ["Test"]
