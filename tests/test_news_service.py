@@ -34,6 +34,20 @@ class SlowCollector:
         return []
 
 
+class MultiStoryCollector:
+    name = "many"
+
+    async def collect(self, query: str, limit: int) -> list[NewsArticle]:
+        return [
+            NewsArticle(
+                title=f"Technology story number {number}",
+                url=f"https://example.com/story-{number}",
+                source_name="Many",
+            )
+            for number in range(limit)
+        ]
+
+
 @pytest.mark.asyncio
 async def test_service_continues_when_a_provider_fails() -> None:
     articles = await NewsCollectionService([WorkingCollector(), FailingCollector()]).collect(
@@ -41,6 +55,15 @@ async def test_service_continues_when_a_provider_fails() -> None:
     )
 
     assert [article.source_name for article in articles] == ["Test"]
+
+
+@pytest.mark.asyncio
+async def test_service_rotates_between_sources() -> None:
+    articles = await NewsCollectionService([MultiStoryCollector(), WorkingCollector()]).collect(
+        "AI", 3
+    )
+
+    assert [article.source_name for article in articles] == ["Many", "Test", "Many"]
 
 
 @pytest.mark.asyncio

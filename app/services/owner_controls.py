@@ -71,6 +71,10 @@ class OwnerControlService:
                 continue
             result = await self.analysis.analyze_and_store(article, session)
             candidates.append((article, result))
+            # One reviewable draft at a time keeps the Telegram approval flow
+            # clear, even when a collection run finds many eligible stories.
+            if len(candidates) >= 10:
+                break
 
         recommended = [(article, analysis) for article, analysis in candidates if analysis.recommended]
         if not recommended:
@@ -102,7 +106,7 @@ class OwnerControlService:
             recommended = [(article, analysis)]
 
         sent = 0
-        for article, _ in recommended:
+        for article, _ in recommended[:1]:
             draft = await self.drafts.generate_and_store(article, session)
             await self.bot.send_message(self.owner_chat_id, draft.post_text, approval_buttons(draft.id))
             sent += 1

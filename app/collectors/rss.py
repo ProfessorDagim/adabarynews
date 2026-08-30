@@ -56,13 +56,23 @@ class RssCollector:
             results = await asyncio.gather(
                 *(fetch_feed(feed) for feed in self.feeds), return_exceptions=True
             )
-            articles = [
-                article
-                for feed_articles in results
-                if isinstance(feed_articles, list)
-                for article in feed_articles
-            ]
-            return articles[:limit]
+            feed_articles = [result for result in results if isinstance(result, list)]
+            articles: list[NewsArticle] = []
+            seen: set[str] = set()
+            # Prefer a mix of publishers over a long run of items from the
+            # first feed in the configuration.
+            while any(feed_articles):
+                for source_articles in feed_articles:
+                    if not source_articles:
+                        continue
+                    article = source_articles.pop(0)
+                    if str(article.url) in seen:
+                        continue
+                    seen.add(str(article.url))
+                    articles.append(article)
+                    if len(articles) >= limit:
+                        return articles
+            return articles
         finally:
             if owns_client:
                 await client.aclose()
