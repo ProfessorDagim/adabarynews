@@ -14,6 +14,7 @@ from app.services.article_storage import ArticleStorageService
 from app.services.article_analysis import ArticleAnalysisService, build_analyzer
 from datetime import datetime
 from contextlib import asynccontextmanager
+import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from app.database.models import Article, ArticleAnalysis, PostDraft
@@ -27,6 +28,7 @@ from app.services.owner_controls import OwnerControlService, control_panel
 from app.telegram.publisher import TelegramPublisher
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 news_service = NewsCollectionService(
     collectors=[
@@ -34,6 +36,12 @@ news_service = NewsCollectionService(
         RssCollector(
             feeds=[
                 RssFeed("OpenAI News", "https://openai.com/news/rss.xml"),
+                RssFeed("Google AI Blog", "https://blog.google/technology/ai/rss/"),
+                RssFeed("Hugging Face Blog", "https://huggingface.co/blog/feed.xml"),
+                RssFeed(
+                    "AWS Machine Learning Blog",
+                    "https://aws.amazon.com/blogs/machine-learning/feed/",
+                ),
                 RssFeed(
                     "TechCrunch AI",
                     "https://techcrunch.com/category/artificial-intelligence/feed/",
@@ -64,13 +72,44 @@ async def run_scheduled_publications() -> None:
         session.close()
 
 
+async def refresh_news_pool() -> None:
+    """Keep a ready-to-review pool of articles for the owner bot."""
+    session = SessionLocal()
+    try:
+        articles = await news_service.collect(
+            settings.news_query,
+            settings.news_prefetch_limit,
+            timeout_seconds=12.0,
+        )
+        summary = article_storage_service.store(articles, session)
+        logger.info(
+            "News pool refresh completed: collected=%s stored=%s duplicates=%s",
+            len(articles),
+            summary.stored,
+            summary.duplicates,
+        )
+    except Exception:
+        logger.exception("News pool refresh failed")
+    finally:
+        session.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     create_tables()
     scheduler = AsyncIOScheduler(timezone=settings.scheduler_timezone)
     if settings.scheduler_enabled:
         scheduler.add_job(run_scheduled_publications, "interval", minutes=1, id="scheduled-publications")
+        scheduler.add_job(
+            refresh_news_pool,
+            "interval",
+            minutes=settings.news_prefetch_interval_minutes,
+            id="news-pool-refresh",
+            max_instances=1,
+            coalesce=True,
+        )
         scheduler.start()
+        asyncio.create_task(refresh_news_pool())
     try:
         yield
     finally:
@@ -334,6 +373,7 @@ async def telegram_webhook(
                         f"Search complete: {sent} draft(s) ready for review.",
                     )
                 except Exception:
+                    logger.exception("Owner-triggered news search failed")
                     await controls.bot.send_message(
                         settings.telegram_owner_chat_id,
                         "Search could not finish. Please try Find news again.",

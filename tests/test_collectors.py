@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 import pytest
 
@@ -69,3 +71,25 @@ async def test_rss_collector_continues_after_one_feed_fails() -> None:
         ).collect("unused", 10, client)
 
     assert [article.source_name for article in articles] == ["Available"]
+
+
+@pytest.mark.asyncio
+async def test_rss_collector_keeps_fast_feed_when_another_feed_times_out() -> None:
+    xml = b"""<?xml version='1.0'?><rss version='2.0'><channel><title>Test</title>
+    <item><title>Important artificial intelligence announcement</title>
+    <link>https://example.com/article</link></item></channel></rss>"""
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "slow.test":
+            await asyncio.sleep(0.05)
+        return httpx.Response(200, content=xml)
+
+    transport = httpx.MockTransport(handler)
+    collector = RssCollector(
+        [RssFeed("Slow", "https://slow.test/rss"), RssFeed("Fast", "https://fast.test/rss")]
+    )
+    collector.per_feed_timeout_seconds = 0.01
+    async with httpx.AsyncClient(transport=transport) as client:
+        articles = await collector.collect("unused", 10, client)
+
+    assert [article.source_name for article in articles] == ["Fast"]

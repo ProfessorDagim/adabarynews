@@ -19,6 +19,9 @@ class RssCollector:
     """Collect articles from curated RSS and official announcement feeds."""
 
     name = "RSS"
+    # A single publisher must never hold up every other source.  This stays
+    # below the owner-search budget, so successful feeds can still be used.
+    per_feed_timeout_seconds = 4.0
 
     def __init__(self, feeds: list[RssFeed]) -> None:
         self.feeds = feeds
@@ -32,9 +35,11 @@ class RssCollector:
         try:
             async def fetch_feed(feed: RssFeed) -> list[NewsArticle]:
                 try:
-                    response = await client.get(feed.url)
+                    response = await asyncio.wait_for(
+                        client.get(feed.url), timeout=self.per_feed_timeout_seconds
+                    )
                     response.raise_for_status()
-                except httpx.HTTPError:
+                except (asyncio.TimeoutError, httpx.HTTPError):
                     return []
                 parsed = feedparser.parse(response.content)
                 feed_articles: list[NewsArticle] = []
@@ -46,8 +51,17 @@ class RssCollector:
                             break
                 return feed_articles
 
-            results = await asyncio.gather(*(fetch_feed(feed) for feed in self.feeds))
-            articles = [article for feed_articles in results for article in feed_articles]
+            # return_exceptions keeps one malformed publisher response from
+            # discarding articles already received from the other publishers.
+            results = await asyncio.gather(
+                *(fetch_feed(feed) for feed in self.feeds), return_exceptions=True
+            )
+            articles = [
+                article
+                for feed_articles in results
+                if isinstance(feed_articles, list)
+                for article in feed_articles
+            ]
             return articles[:limit]
         finally:
             if owns_client:

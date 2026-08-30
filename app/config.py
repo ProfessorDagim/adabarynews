@@ -15,6 +15,8 @@ class Settings(BaseSettings):
         "NVIDIA OR robotics"
     )
     news_collection_limit: int = 20
+    news_prefetch_limit: int = 30
+    news_prefetch_interval_minutes: int = 15
     owner_find_limit: int = 5
     owner_find_timeout_seconds: float = 6.0
     owner_fallback_minimum_score: int = 40

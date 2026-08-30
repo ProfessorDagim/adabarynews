@@ -91,6 +91,16 @@ class OwnerControlService:
                 session.commit()
                 recommended = [(article, analysis)]
 
+        if not recommended and candidates:
+            # The owner still reviews every result before it reaches the
+            # channel.  On a quiet day, offer the strongest fresh article even
+            # if the automatic score is conservative, rather than replying
+            # with an empty search result.
+            article, analysis = max(candidates, key=lambda item: item[1].final_score)
+            analysis.recommended = True
+            session.commit()
+            recommended = [(article, analysis)]
+
         sent = 0
         for article, _ in recommended:
             draft = await self.drafts.generate_and_store(article, session)
